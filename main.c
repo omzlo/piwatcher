@@ -79,10 +79,6 @@ static int piwatcher_write_block(uint8_t reg, uint8_t *buf, uint8_t count)
     }
     return res;
 }
-struct command_desc {
-    const char *command;
-    int (*run)(int, char **);
-};
 
 static const char *status_to_string(uint8_t status)
 {
@@ -254,7 +250,7 @@ int cmd_wake(int argc, char **argv)
             return -1; 
         }
         if ((wku&1)!=0) {
-            fprintf(stderr,"Warning: wakeup value will be rounded to %u.", wku+1);
+            fprintf(stderr,"Warning: wakeup value will be rounded to %u.\n", wku+1);
         }
         wku = (wku+1)>>1;
 
@@ -272,16 +268,33 @@ int cmd_wake(int argc, char **argv)
 }       
 
 
-
-#define COUNT_COMMANDS 6
-struct command_desc commands[COUNT_COMMANDS] = {
-    { "ticks", cmd_ticks },
-    { "dump", cmd_dump },
-    { "reset", cmd_reset },
-    { "status", cmd_status },
-    { "wake", cmd_wake },
-    { "watch", cmd_watch },
+struct command_desc {
+    const char *command;
+    int (*run)(int, char **);
+    const char *help_text;
 };
+
+int cmd_help(int argc, char **argv);
+
+#define COUNT_COMMANDS 7
+struct command_desc commands[COUNT_COMMANDS] = {
+    { "ticks", cmd_ticks, "print the current number of clock ticks," },
+    { "dump", cmd_dump, "dump the registers in hexadecimal." },
+    { "help", cmd_help, "print this help" },
+    { "reset", cmd_reset, "clear the status register" },
+    { "status", cmd_status, "print the status register" },
+    { "wake", cmd_wake, "show or set the current wake delay in seconds." },
+    { "watch", cmd_watch, "show or set the current watchdog interval in seconds." },
+};
+
+int cmd_help(int argc, char **argv)
+{
+    fprintf(stdout,"piwatcher <command> [argument]\n");
+    fprintf(stdout,"Where command is:\n");
+    for (int i=0;i<COUNT_COMMANDS;i++)
+        fprintf(stdout, "\t%s: %s\n", commands[i].command, commands[i].help_text);
+    fprintf(stdout,"For more info: https://www.omzlo.com/the-piwatcher\n");
+}
 
 int main(int argc, char **argv)
 {
