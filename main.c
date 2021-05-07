@@ -189,14 +189,14 @@ int cmd_watch(int argc, char **argv)
 int cmd_dump(int argc, char **argv)
 {
     uint8_t block[32];
-    int res = piwatcher_read_block(0,block,8);
+    int res = piwatcher_read_block(0,block,12);
     
     if (res<0) {
         fprintf(stdout, "ERR\n");
         return res;
     } 
     fprintf(stdout,"OK\t");
-    for (int i=0;i<8;i++)
+    for (int i=0;i<12;i++)
         fprintf(stdout,"%02x ", block[i]);
     fprintf(stdout, "\n");
     return 0;
@@ -267,6 +267,128 @@ int cmd_wake(int argc, char **argv)
     return 0;
 }       
 
+int cmd_defaults(int argc, char **argv)
+{
+    char block[4];
+
+    if (argc==0) 
+    {
+        int res = piwatcher_read_block(8,block,4);
+
+        if (res<0) {
+            fprintf(stdout,"ERR\n");
+            return res;
+        }
+        if ((block[0]<2) || (block[0]==0xFF))
+        {
+            fprintf(stderr,"Wrong firmware version\n");
+            fprintf(stdout,"ERR\n");
+            return -1;
+        }
+        uint32_t seconds = ((uint32_t)block[2]<<1) | ((uint32_t)block[3]<<9);
+        fprintf(stdout,"OK\t%s", time_to_string(block[1]));
+        fprintf(stdout,"\t%s\n", time_to_string(seconds));
+    }
+    else
+    {
+        int res = piwatcher_read_register(8);
+
+        if (res<0) {
+            fprintf(stdout,"ERR\n");
+            return res;
+        }
+        if ((res<2) || (res==0xFF))
+        {
+            fprintf(stderr,"Wrong firmware version\n");
+            fprintf(stdout,"ERR\n");
+            return -1;
+        }
+
+        int wdd;
+        if ((wdd = as_seconds(argv[0]))<0)
+        {
+            fprintf(stderr,"Syntax error in watchdog timeout value '%s'.\n", argv[0]);
+            fprintf(stdout,"ERR\n");
+            return wdd;
+        }   
+        if (wdd>255)
+        {
+            fprintf(stderr,"Watchdog value cannot exceed 255.\n");
+            fprintf(stdout,"ERR\n");
+            return -1;
+        }  
+
+        uint32_t wku;
+        if ((wku = as_seconds(argv[1]))<0)
+        {
+            fprintf(stderr,"Syntax error in wakeup timeout value '%s'.", argv[1]);
+            fprintf(stdout,"ERR\n");
+            return wku;
+        }
+        if (wku>131070) {
+            fprintf(stderr,"Wakeup value cannot exceed 131070.\n");
+            fprintf(stdout,"ERR\n");
+            return -1; 
+        }
+        if ((wku&1)!=0) {
+            fprintf(stderr,"Warning: wakeup value will be rounded to %u.\n", wku+1);
+        }
+        wku = (wku+1)>>1;
+
+        block[0] = wdd & 0xFF;
+        block[1] = wku & 0xFF;
+        block[2] = wku >> 8;
+            
+        res = piwatcher_write_block(9, block, 3);
+        if (res<0) {
+            fprintf(stdout,"ERR\n");
+            return res;
+        }
+        fprintf(stdout,"OK\n");
+    }
+}
+
+int cmd_led(int argc, char **argv)
+{
+    int res = piwatcher_read_register(8);
+
+    if (res<0) {
+        fprintf(stdout,"ERR\n");
+        return res;
+    }
+    if ((res<2) || (res==0xFF))
+    {
+        fprintf(stderr,"Wrong firmware version\n"); 
+        fprintf(stdout,"ERR\n");
+        return -1;
+    }
+    if (argc!=1)
+    {
+        fprintf(stderr,"Missing parameter ('on' or 'off')\n");
+        fprintf(stdout,"ERR\n");
+        return -1;
+    }
+    if (strcmp(argv[0],"off")==0) 
+    {
+        res = piwatcher_write_register(8,0x81);
+    }
+    else if (strcmp(argv[0],"on")==0)
+    {
+        res = piwatcher_write_register(8,0x82);
+    }
+    else
+    {
+        fprintf(stderr,"Parameter should be 'on' or 'off'\n");
+        fprintf(stdout,"ERR\n");
+        return -1;
+    }
+    if (res<0) {
+        fprintf(stdout,"ERR\n");
+        return res;
+    }
+    fprintf(stdout,"OK\n");
+    return 0;
+}
 
 struct command_desc {
     const char *command;
@@ -276,11 +398,13 @@ struct command_desc {
 
 int cmd_help(int argc, char **argv);
 
-#define COUNT_COMMANDS 7
+#define COUNT_COMMANDS 9
 struct command_desc commands[COUNT_COMMANDS] = {
     { "ticks", cmd_ticks, "print the current number of clock ticks," },
+    { "defaults", cmd_defaults, "Set default values for watchdog interval and wakeup delay, stored in eeprom and loaded at boot time." }, 
     { "dump", cmd_dump, "dump the registers in hexadecimal." },
     { "help", cmd_help, "print this help" },
+    { "led", cmd_led, "Switch the onboard LED on or off" },
     { "reset", cmd_reset, "clear the status register" },
     { "status", cmd_status, "print the status register" },
     { "wake", cmd_wake, "show or set the current wake delay in seconds." },
